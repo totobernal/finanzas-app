@@ -248,7 +248,8 @@ function FinanceApp({ session }) {
       balance: startingBalance,
       user_id: userId,
     };
-    const { data } = await supabase.from("debts").insert(payload).select().single();
+    const { data, error } = await supabase.from("debts").insert(payload).select().single();
+    if (error) { alert("No se pudo guardar la deuda: " + error.message); return; }
     if (data) setDebts(prev => [data, ...prev]);
   };
 
