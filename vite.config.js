@@ -16,7 +16,7 @@ export default defineConfig({
         description: "App de finanzas personales",
         theme_color: "#1c1917",
         background_color: "#fafaf9",
-        display: "standalone",
+        display: "minimal-ui",
         start_url: "/finanzas-app/",
         scope: "/finanzas-app/",
         icons: [
