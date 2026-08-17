@@ -175,8 +175,17 @@ function FinanceApp({ session }) {
   }, [combined, mk]);
 
   const monthTx = useMemo(() => transactions.filter(t => t.date.startsWith(mk)), [transactions, mk]);
+  const creditCardAccountIds = useMemo(() =>
+    new Set(debts.filter(d => d.type === "credit_card" && d.account_id).map(d => d.account_id)),
+    [debts]
+  );
   const income = useMemo(() => monthTx.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0), [monthTx]);
-  const expense = useMemo(() => monthTx.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0), [monthTx]);
+  const expense = useMemo(() =>
+    monthTx
+      .filter(t => t.type === "debt_payment" || (t.type === "expense" && !creditCardAccountIds.has(t.account_id)))
+      .reduce((s, t) => s + Number(t.amount), 0),
+    [monthTx, creditCardAccountIds]
+  );
 
   const prevMk = useMemo(() => {
     const [y, m] = mk.split("-").map(Number);
@@ -987,4 +996,5 @@ function AddModal({ onClose, categories, accounts, debts, transactions, onSave, 
     </div>
   );
 }
+
 
