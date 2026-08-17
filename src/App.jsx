@@ -545,7 +545,7 @@ function TransactionsView({ transactions, categories, accounts, deleteTx }) {
           <div key={t.id} className="bg-white border border-stone-200 rounded-xl px-4 py-3 flex justify-between items-center">
             <div>
               <p className="text-sm font-medium">
-                {catName(t.category_id) || t.note || (t.type === "income" ? "Ingreso" : "Pago de deuda")}
+                {catName(t.category_id) || t.note || (t.type === "income" ? "Ingreso" : t.type === "debt_payment" ? "Pago de deuda" : "Gasto (sin categoría)")}
                 {t.vendor ? ` · ${t.vendor}` : ""}
               </p>
               <p className="text-xs text-stone-500">{t.date} · {accName(t.account_id) || ""}{t.note && t.category_id ? ` · ${t.note}` : ""}</p>
@@ -987,3 +987,4 @@ function AddModal({ onClose, categories, accounts, debts, transactions, onSave, 
     </div>
   );
 }
+
