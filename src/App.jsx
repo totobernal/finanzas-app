@@ -229,9 +229,11 @@ function FinanceApp({ session }) {
     const newBalance = Math.max(0, Number(debt.balance) - amount);
     await supabase.from("debts").update({ balance: newBalance }).eq("id", debtId);
     setDebts(prev => prev.map(d => d.id === debtId ? { ...d, balance: newBalance } : d));
-    const { data: pay } = await supabase.from("debt_payments").insert({ debt_id: debtId, amount, date, user_id: userId }).select().single();
+    const { data: pay, error: payError } = await supabase.from("debt_payments").insert({ debt_id: debtId, amount, date, user_id: userId }).select().single();
+    if (payError) { alert("No se pudo registrar el historial de pago: " + payError.message); }
     if (pay) setDebtPayments(prev => [pay, ...prev]);
-    await addTransaction({ type: "debt_payment", account_id: accountId, amount, date, debt_id: debtId, note: `Pago a ${debt.name}` });
+    const { error: txError } = await addTransaction({ type: "debt_payment", account_id: accountId, amount, date, debt_id: debtId, note: `Pago a ${debt.name}` });
+    if (txError) { alert("El saldo se actualizó pero la transacción no se pudo guardar: " + txError.message); }
   };
 
   const setBudget = async (categoryId, amount) => {
