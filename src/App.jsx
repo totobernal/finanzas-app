@@ -34,32 +34,43 @@ export default function App() {
 function LoginScreen() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const sendLink = async () => {
+  const sendCode = async () => {
     if (!email.trim()) return;
     setLoading(true);
     setError("");
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo: window.location.origin + window.location.pathname },
     });
     setLoading(false);
     if (error) setError(error.message);
     else setSent(true);
   };
 
+  const verifyCode = async () => {
+    if (!code.trim()) return;
+    setLoading(true);
+    setError("");
+    const { error } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token: code.trim(),
+      type: "email",
+    });
+    setLoading(false);
+    if (error) setError("Código incorrecto o expirado. Intenta de nuevo.");
+  };
+
   return (
     <div className="min-h-screen bg-stone-50 flex items-center justify-center px-6">
       <div className="w-full max-w-sm">
         <h1 className="text-2xl font-medium mb-1">Finanzas</h1>
-        <p className="text-sm text-stone-500 mb-6">Inicia sesión con tu correo para continuar.</p>
-        {sent ? (
-          <div className="bg-emerald-50 text-emerald-800 text-sm rounded-xl p-4">
-            Te enviamos un enlace a <strong>{email}</strong>. Ábrelo desde tu correo en este mismo dispositivo para entrar.
-          </div>
-        ) : (
+        <p className="text-sm text-stone-500 mb-6">
+          {sent ? "Ingresa el código que te enviamos por correo." : "Inicia sesión con tu correo para continuar."}
+        </p>
+        {!sent ? (
           <div className="space-y-3">
             <input
               type="email"
@@ -70,11 +81,37 @@ function LoginScreen() {
             />
             {error && <p className="text-xs text-red-500">{error}</p>}
             <button
-              onClick={sendLink}
+              onClick={sendCode}
               disabled={loading}
               className="w-full bg-stone-900 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50"
             >
-              {loading ? "Enviando..." : "Enviar enlace mágico"}
+              {loading ? "Enviando..." : "Enviar código"}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="123456"
+              maxLength={6}
+              className="w-full text-center text-2xl tracking-[0.5em] border border-stone-200 rounded-lg px-3 py-2.5"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+            />
+            {error && <p className="text-xs text-red-500">{error}</p>}
+            <button
+              onClick={verifyCode}
+              disabled={loading}
+              className="w-full bg-stone-900 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50"
+            >
+              {loading ? "Verificando..." : "Confirmar código"}
+            </button>
+            <button
+              onClick={() => { setSent(false); setCode(""); setError(""); }}
+              className="w-full text-xs text-stone-400"
+            >
+              Usar otro correo
             </button>
           </div>
         )}
@@ -82,6 +119,7 @@ function LoginScreen() {
     </div>
   );
 }
+
 
 function FinanceApp({ session }) {
   const userId = session.user.id;
