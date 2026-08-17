@@ -5,3 +5,8 @@
 body {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Evita que iOS haga zoom automático al enfocar inputs con texto pequeño */
+input, select, textarea {
+  font-size: 16px !important;
+}
