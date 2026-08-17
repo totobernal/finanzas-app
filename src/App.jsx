@@ -500,3 +500,489 @@ function MetricCard({ label, value, positive }) {
     </div>
   );
 }
+
+function ExpensePieChart({ categoryStats, totalExpense }) {
+  const data = categoryStats.filter(c => c.spent > 0).map(c => ({ name: c.cat, value: c.spent }));
+  if (data.length === 0) return null;
+  return (
+    <div className="mb-6">
+      <p className="font-medium mb-3">Gastos por categoría</p>
+      <div className="bg-white border border-stone-200 rounded-xl p-3">
+        <div style={{ width: "100%", height: 220 }}>
+          <ResponsiveContainer>
+            <PieChart>
+              <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2}>
+                {data.map((entry, i) => <Cell key={entry.name} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+              </Pie>
+              <Tooltip formatter={(v) => fmt(v)} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-2">
+          {data.map((d, i) => (
+            <div key={d.name} className="flex items-center gap-1.5 text-xs">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+              <span className="text-stone-600 truncate">{d.name}</span>
+              <span className="text-stone-400 ml-auto">{totalExpense > 0 ? Math.round((d.value / totalExpense) * 100) : 0}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TransactionsView({ transactions, categories, accounts, deleteTx }) {
+  const catName = (id) => categories.find(c => c.id === id)?.name;
+  const accName = (id) => accounts.find(a => a.id === id)?.name;
+  return (
+    <div>
+      <p className="font-medium mb-3">Transacciones</p>
+      {transactions.length === 0 && <p className="text-sm text-stone-400">Sin transacciones todavía.</p>}
+      <div className="space-y-2">
+        {transactions.map(t => (
+          <div key={t.id} className="bg-white border border-stone-200 rounded-xl px-4 py-3 flex justify-between items-center">
+            <div>
+              <p className="text-sm font-medium">
+                {catName(t.category_id) || t.note || (t.type === "income" ? "Ingreso" : "Pago de deuda")}
+                {t.vendor ? ` · ${t.vendor}` : ""}
+              </p>
+              <p className="text-xs text-stone-500">{t.date} · {accName(t.account_id) || ""}{t.note && t.category_id ? ` · ${t.note}` : ""}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className={`text-sm font-medium ${t.type === "income" ? "text-emerald-700" : "text-red-700"}`}>
+                {t.type === "income" ? "+" : "-"}{fmt(t.amount)}
+              </span>
+              <button onClick={() => deleteTx(t.id)} className="text-stone-300 hover:text-red-500">
+                <Trash2 size={16} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BudgetsView({ categoryStats, setBudget }) {
+  const [edits, setEdits] = useState({});
+  return (
+    <div>
+      <p className="font-medium mb-1">Presupuesto por categoría</p>
+      <p className="text-xs text-stone-400 mb-3">Se mantiene igual cada mes hasta que lo cambies aquí.</p>
+      <div className="space-y-3">
+        {categoryStats.map(c => (
+          <div key={c.id} className="bg-white border border-stone-200 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">{c.cat}</p>
+              <p className="text-xs text-stone-500">Gastado: {fmt(c.spent)}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-stone-400 text-sm">$</span>
+              <input
+                type="number"
+                defaultValue={c.budget || ""}
+                placeholder="0"
+                className="w-20 border border-stone-200 rounded-lg px-2 py-1 text-sm text-right"
+                onChange={(e) => setEdits(prev => ({ ...prev, [c.id]: e.target.value }))}
+              />
+              <button
+                onClick={() => setBudget(c.id, parseFloat(edits[c.id] ?? c.budget ?? 0) || 0)}
+                className="text-stone-500 hover:text-stone-900"
+              >
+                <Check size={16} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DebtsView({ debts, addDebt, addDebtPayment, updateDebt, deleteDebt, accounts }) {
+  const [showForm, setShowForm] = useState(false);
+  const [payDebtId, setPayDebtId] = useState(null);
+  const [editDebtId, setEditDebtId] = useState(null);
+  const [form, setForm] = useState({ name: "", type: "loan", original_amount: "", current_balance: "", account_id: accounts[0]?.id || "", rate: "", min_payment: "" });
+  const [editForm, setEditForm] = useState({});
+  const [payForm, setPayForm] = useState({ amount: "", date: new Date().toISOString().slice(0, 10), account_id: accounts[0]?.id || "" });
+
+  const resetForm = () => setForm({ name: "", type: "loan", original_amount: "", current_balance: "", account_id: accounts[0]?.id || "", rate: "", min_payment: "" });
+
+  const submitDebt = async () => {
+    if (!form.name) return;
+    if (form.type === "loan" && !form.original_amount) return;
+    await addDebt({
+      name: form.name,
+      type: form.type,
+      original_amount: form.original_amount,
+      current_balance: form.current_balance,
+      account_id: form.type === "credit_card" ? form.account_id : null,
+      rate: parseFloat(form.rate) || 0,
+      min_payment: parseFloat(form.min_payment) || 0,
+    });
+    resetForm();
+    setShowForm(false);
+  };
+
+  const startEdit = (d) => {
+    setEditDebtId(d.id);
+    setEditForm({ name: d.name, rate: d.rate, min_payment: d.min_payment, account_id: d.account_id || accounts[0]?.id || "" });
+  };
+
+  const saveEdit = async (d) => {
+    await updateDebt(d.id, {
+      name: editForm.name,
+      rate: parseFloat(editForm.rate) || 0,
+      min_payment: parseFloat(editForm.min_payment) || 0,
+      account_id: d.type === "credit_card" ? editForm.account_id : null,
+    });
+    setEditDebtId(null);
+  };
+
+  const confirmDelete = (d) => {
+    if (window.confirm(`¿Borrar "${d.name}"? Esto también borra su historial de pagos.`)) {
+      deleteDebt(d.id);
+    }
+  };
+
+  const submitPayment = async () => {
+    if (!payForm.amount || !payDebtId) return;
+    await addDebtPayment(payDebtId, parseFloat(payForm.amount), payForm.date, payForm.account_id);
+    setPayForm({ amount: "", date: new Date().toISOString().slice(0, 10), account_id: accounts[0]?.id || "" });
+    setPayDebtId(null);
+  };
+
+  const accName = (id) => accounts.find(a => a.id === id)?.name;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <p className="font-medium">Deudas</p>
+        <button onClick={() => setShowForm(!showForm)} className="text-sm text-stone-600 flex items-center gap-1">
+          <Plus size={14} /> Nueva deuda
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="bg-white border border-stone-200 rounded-xl p-4 mb-4 space-y-2">
+          <div className="flex bg-stone-100 rounded-lg p-0.5 text-sm mb-1">
+            <button onClick={() => setForm({ ...form, type: "loan" })}
+              className={`flex-1 py-1.5 rounded-md font-medium ${form.type === "loan" ? "bg-white shadow-sm" : "text-stone-500"}`}>Préstamo</button>
+            <button onClick={() => setForm({ ...form, type: "credit_card" })}
+              className={`flex-1 py-1.5 rounded-md font-medium ${form.type === "credit_card" ? "bg-white shadow-sm" : "text-stone-500"}`}>Tarjeta de crédito</button>
+          </div>
+          <input placeholder="Nombre (ej. Tarjeta Visa)" className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm"
+            value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+
+          {form.type === "loan" ? (
+            <input placeholder="Monto original" type="number" className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm"
+              value={form.original_amount} onChange={e => setForm({ ...form, original_amount: e.target.value })} />
+          ) : (
+            <>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Cuenta vinculada (los gastos con esta cuenta subirán el saldo)</label>
+                <select className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm" value={form.account_id} onChange={e => setForm({ ...form, account_id: e.target.value })}>
+                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
+              <input placeholder="Saldo actual (si ya debes algo)" type="number" className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm"
+                value={form.current_balance} onChange={e => setForm({ ...form, current_balance: e.target.value })} />
+            </>
+          )}
+
+          <div className="flex gap-2">
+            <input placeholder="Tasa % anual" type="number" className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm"
+              value={form.rate} onChange={e => setForm({ ...form, rate: e.target.value })} />
+            <input placeholder="Pago mínimo" type="number" className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm"
+              value={form.min_payment} onChange={e => setForm({ ...form, min_payment: e.target.value })} />
+          </div>
+          <button onClick={submitDebt} className="w-full bg-stone-900 text-white rounded-lg py-2 text-sm font-medium">Guardar deuda</button>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {debts.map(d => {
+          const isCard = d.type === "credit_card";
+          const paid = !isCard ? d.original_amount - d.balance : 0;
+          const pct = !isCard && d.original_amount > 0 ? Math.round((paid / d.original_amount) * 100) : 0;
+          const editing = editDebtId === d.id;
+
+          return (
+            <div key={d.id} className="bg-white border border-stone-200 rounded-xl p-4">
+              {editing ? (
+                <div className="space-y-2 mb-2">
+                  <input className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm" value={editForm.name}
+                    onChange={e => setEditForm({ ...editForm, name: e.target.value })} />
+                  {isCard && (
+                    <select className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm" value={editForm.account_id}
+                      onChange={e => setEditForm({ ...editForm, account_id: e.target.value })}>
+                      {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  )}
+                  <div className="flex gap-2">
+                    <input placeholder="Tasa %" type="number" className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm" value={editForm.rate}
+                      onChange={e => setEditForm({ ...editForm, rate: e.target.value })} />
+                    <input placeholder="Pago mínimo" type="number" className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm" value={editForm.min_payment}
+                      onChange={e => setEditForm({ ...editForm, min_payment: e.target.value })} />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => saveEdit(d)} className="flex-1 bg-stone-900 text-white rounded-lg py-2 text-sm font-medium">Guardar</button>
+                    <button onClick={() => setEditDebtId(null)} className="px-3 text-sm text-stone-500">Cancelar</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="text-sm font-medium">{d.name}{isCard ? " · tarjeta" : ""}</p>
+                    <p className="text-xs text-stone-500">
+                      {d.rate}% anual · mínimo {fmt(d.min_payment)}
+                      {isCard && d.account_id ? ` · ${accName(d.account_id)}` : ""}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-medium">{fmt(d.balance)}</p>
+                    <div className="flex gap-2 justify-end mt-1">
+                      <button onClick={() => startEdit(d)} className="text-stone-400"><Pencil size={14} /></button>
+                      <button onClick={() => confirmDelete(d)} className="text-stone-400 hover:text-red-500"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!isCard && (
+                <div className="h-1.5 bg-stone-200 rounded-full mb-3">
+                  <div className="h-1.5 bg-stone-900 rounded-full" style={{ width: `${pct}%` }} />
+                </div>
+              )}
+
+              {payDebtId === d.id ? (
+                <div className="space-y-2 pt-2 border-t border-stone-100">
+                  <input placeholder="Monto del pago" type="number" className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm"
+                    value={payForm.amount} onChange={e => setPayForm({ ...payForm, amount: e.target.value })} />
+                  <div className="flex gap-2">
+                    <button onClick={submitPayment} className="flex-1 bg-stone-900 text-white rounded-lg py-2 text-sm font-medium">Registrar pago</button>
+                    <button onClick={() => setPayDebtId(null)} className="px-3 text-sm text-stone-500">Cancelar</button>
+                  </div>
+                </div>
+              ) : (
+                !editing && <button onClick={() => setPayDebtId(d.id)} className="text-sm text-stone-600 font-medium">Registrar pago</button>
+              )}
+            </div>
+          );
+        })}
+        {debts.length === 0 && !showForm && <p className="text-sm text-stone-400">No tienes deudas registradas.</p>}
+      </div>
+    </div>
+  );
+}
+
+function SettingsView({ categories, addCategory, removeCategory, accounts, addAccount, removeAccount, householdCode, joinHousehold }) {
+  const [newCat, setNewCat] = useState("");
+  const [newAcc, setNewAcc] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [joinMsg, setJoinMsg] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const submitJoin = async () => {
+    setJoinMsg("");
+    const error = await joinHousehold(joinCode.trim());
+    if (error) setJoinMsg(error.message || "No se pudo vincular");
+    else setJoinMsg("¡Vinculado! La vista combinada ya debería reflejarlo.");
+  };
+
+  const copyCode = () => {
+    navigator.clipboard.writeText(householdCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <p className="font-medium mb-2">Vincular con tu pareja</p>
+        <div className="bg-white border border-stone-200 rounded-xl p-4 space-y-3">
+          <div>
+            <p className="text-xs text-stone-500 mb-1">Tu código de invitación</p>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-lg tracking-wider">{householdCode}</span>
+              <button onClick={copyCode} className="text-stone-400"><Copy size={14} /></button>
+              {copied && <span className="text-xs text-emerald-600">Copiado</span>}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs text-stone-500 mb-1">O ingresa el código de tu pareja para vincularte</p>
+            <div className="flex gap-2">
+              <input className="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-sm" value={joinCode} onChange={e => setJoinCode(e.target.value)} />
+              <button onClick={submitJoin} className="bg-stone-900 text-white rounded-lg px-3 text-sm">Unirse</button>
+            </div>
+            {joinMsg && <p className="text-xs text-stone-500 mt-1">{joinMsg}</p>}
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <p className="font-medium mb-2">Categorías</p>
+        <div className="flex flex-wrap gap-2 mb-2">
+          {categories.map(c => (
+            <span key={c.id} className="bg-stone-100 rounded-full px-3 py-1.5 text-sm flex items-center gap-1.5">
+              {c.name} <button onClick={() => removeCategory(c.id)}><X size={12} className="text-stone-400" /></button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input placeholder="Nueva categoría" className="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-sm"
+            value={newCat} onChange={e => setNewCat(e.target.value)} />
+          <button onClick={() => { addCategory(newCat.trim()); setNewCat(""); }} className="bg-stone-900 text-white rounded-lg px-3 text-sm">Añadir</button>
+        </div>
+      </div>
+      <div>
+        <p className="font-medium mb-2">Cuentas</p>
+        <div className="flex flex-wrap gap-2 mb-2">
+          {accounts.map(a => (
+            <span key={a.id} className="bg-stone-100 rounded-full px-3 py-1.5 text-sm flex items-center gap-1.5">
+              {a.name} <button onClick={() => removeAccount(a.id)}><X size={12} className="text-stone-400" /></button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input placeholder="Nueva cuenta" className="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-sm"
+            value={newAcc} onChange={e => setNewAcc(e.target.value)} />
+          <button onClick={() => { addAccount(newAcc.trim()); setNewAcc(""); }} className="bg-stone-900 text-white rounded-lg px-3 text-sm">Añadir</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddModal({ onClose, categories, accounts, debts, transactions, onSave, onDebtPayment }) {
+  const [tab, setTab] = useState("expense");
+  const [amount, setAmount] = useState("");
+  const [accountId, setAccountId] = useState(accounts[0]?.id || "");
+  const [categoryId, setCategoryId] = useState(categories[0]?.id || "");
+  const [vendor, setVendor] = useState("");
+  const [source, setSource] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [note, setNote] = useState("");
+  const [debtId, setDebtId] = useState(debts[0]?.id || "");
+  const [error, setError] = useState("");
+
+  const vendorSuggestions = useMemo(() => {
+    const set = new Set(
+      transactions.filter(t => t.type === "expense" && t.category_id === categoryId && t.vendor).map(t => t.vendor)
+    );
+    return Array.from(set);
+  }, [transactions, categoryId]);
+
+  const submit = async () => {
+    const amt = parseFloat(amount);
+    if (!amt || amt <= 0) { setError("Ingresa un monto válido"); return; }
+    if (tab === "debt" && !debtId) { setError("Selecciona una deuda"); return; }
+    if (tab === "debt") {
+      await onDebtPayment(debtId, amt, date, accountId);
+    } else {
+      await onSave({
+        type: tab,
+        amount: amt,
+        account_id: accountId,
+        category_id: tab === "expense" ? categoryId : null,
+        vendor: tab === "expense" ? vendor.trim() : null,
+        note: tab === "income" ? source : note,
+        date,
+      });
+    }
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/45 flex items-end justify-center z-50" onClick={onClose}>
+      <div className="w-full max-w-md bg-white rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-4">
+          <span className="font-medium">Agregar</span>
+          <button onClick={onClose}><X size={18} className="text-stone-500" /></button>
+        </div>
+
+        <div className="flex border-b border-stone-200 mb-4 text-sm">
+          {[["expense", "Gasto"], ["income", "Ingreso"], ["debt", "Pago deuda"]].map(([id, label]) => (
+            <button key={id} onClick={() => { setTab(id); setError(""); }}
+              className={`flex-1 text-center py-2 font-medium border-b-2 ${tab === id ? "border-stone-900 text-stone-900" : "border-transparent text-stone-400"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-stone-500 block mb-1">Monto</label>
+            <input type="number" placeholder="0.00" className="w-full text-xl border border-stone-200 rounded-lg px-3 py-2"
+              value={amount} onChange={e => setAmount(e.target.value)} />
+          </div>
+
+          {tab === "debt" ? (
+            <div>
+              <label className="text-xs text-stone-500 block mb-1">Deuda</label>
+              <select className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm" value={debtId} onChange={e => setDebtId(e.target.value)}>
+                {debts.map(d => <option key={d.id} value={d.id}>{d.name} · saldo {fmt(d.balance)}</option>)}
+              </select>
+            </div>
+          ) : tab === "expense" ? (
+            <>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Categoría</label>
+                <select className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm" value={categoryId} onChange={e => setCategoryId(e.target.value)}>
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Vendedor / lugar</label>
+                <input
+                  list="vendor-suggestions"
+                  placeholder="Riba Smith, Super 99..."
+                  className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm"
+                  value={vendor}
+                  onChange={e => setVendor(e.target.value)}
+                />
+                <datalist id="vendor-suggestions">
+                  {vendorSuggestions.map(v => <option key={v} value={v} />)}
+                </datalist>
+              </div>
+            </>
+          ) : (
+            <div>
+              <label className="text-xs text-stone-500 block mb-1">Fuente del ingreso</label>
+              <input placeholder="Salario, freelance..." className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm"
+                value={source} onChange={e => setSource(e.target.value)} />
+            </div>
+          )}
+
+          <div>
+            <label className="text-xs text-stone-500 block mb-1">Cuenta</label>
+            <select className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm" value={accountId} onChange={e => setAccountId(e.target.value)}>
+              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs text-stone-500 block mb-1">Fecha</label>
+            <input type="date" className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm" value={date} onChange={e => setDate(e.target.value)} />
+          </div>
+
+          {tab === "expense" && (
+            <div>
+              <label className="text-xs text-stone-500 block mb-1">Nota</label>
+              <textarea placeholder="Opcional" className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm min-h-[44px]"
+                value={note} onChange={e => setNote(e.target.value)} />
+            </div>
+          )}
+
+          {error && <p className="text-xs text-red-500">{error}</p>}
+
+          <button onClick={submit} className="w-full bg-stone-900 text-white rounded-lg py-2.5 text-sm font-medium mt-2">
+            Guardar {tab === "expense" ? "gasto" : tab === "income" ? "ingreso" : "pago"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
