@@ -451,10 +451,20 @@ function Dashboard({ combined, setCombined, mk, income, expense, combinedTotals,
       )}
 
       {!combined && (
-        <div className="bg-stone-900 text-white rounded-xl p-4 mb-5 flex justify-between items-center">
+        <div className="bg-stone-900 text-white rounded-xl p-4 mb-3 flex justify-between items-center">
           <span className="text-sm text-stone-300">Disponible</span>
           <span className="text-xl font-medium">{fmt(income - expense)}</span>
         </div>
+      )}
+
+      {!combined && (
+        <button onClick={() => setView("debts")} className="w-full bg-white border border-stone-200 rounded-xl px-4 py-3 flex justify-between items-center mb-5">
+          <div className="text-left">
+            <p className="text-xs text-stone-500">Saldo total adeudado</p>
+            <p className="text-lg font-medium">{fmt(totalDebt)}</p>
+          </div>
+          <ChevronRight size={18} className="text-stone-400" />
+        </button>
       )}
 
       {flaggedCats.length > 0 && (
@@ -491,15 +501,6 @@ function Dashboard({ combined, setCombined, mk, income, expense, combinedTotals,
           <p className="text-sm text-stone-400">Aún no hay gastos ni presupuestos este mes.</p>
         )}
       </div>
-
-      <p className="font-medium mb-3">Deudas</p>
-      <button onClick={() => setView("debts")} className="w-full bg-white border border-stone-200 rounded-xl px-4 py-3 flex justify-between items-center">
-        <div className="text-left">
-          <p className="text-xs text-stone-500">Saldo total adeudado</p>
-          <p className="text-lg font-medium">{fmt(totalDebt)}</p>
-        </div>
-        <ChevronRight size={18} className="text-stone-400" />
-      </button>
     </div>
   );
 }
@@ -998,5 +999,6 @@ function AddModal({ onClose, categories, accounts, debts, transactions, onSave, 
     </div>
   );
 }
+
 
 
